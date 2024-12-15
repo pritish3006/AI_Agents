@@ -22,10 +22,8 @@ wheels/
 
 # Virtual Environment
 venv/
+env/
 ENV/
-
-# Environment Variables
-.env
 
 # IDE
 .idea/
@@ -33,12 +31,25 @@ ENV/
 *.swp
 *.swo
 
-# Logs
-*.log
+# Environment and Secrets
+.env
+.secrets.json
+.env.local
+.env.*.local
 
-# Test coverage
+# Logs and databases
+*.log
+*.sqlite
+*.db
+
+# Development and tracking
+dev_tracker.txt
+.DS_Store
 .coverage
 htmlcov/
+.pytest_cache/
+coverage.xml
+*.cover
 
 # Docker
 .docker/ 
