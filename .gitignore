@@ -52,4 +52,15 @@ coverage.xml
 *.cover
 
 # Docker
-.docker/ 
+.docker/
+docker-compose.override.yml
+*.env
+.env.*
+Dockerfile.local
+docker-compose.*.yml
+!docker-compose.yml
+!docker-compose.prod.yml
+!docker-compose.staging.yml
+.dockerignore
+docker-volumes/
+tmp/ 
