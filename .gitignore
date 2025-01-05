@@ -63,4 +63,27 @@ docker-compose.*.yml
 !docker-compose.staging.yml
 .dockerignore
 docker-volumes/
-tmp/ 
+tmp/
+
+# Monitoring and Metrics
+prometheus.yml
+grafana/
+prometheus/
+node_exporter/
+alertmanager/
+*.rules
+
+# Local environment files
+*.local.yml
+*.local.yaml
+local_settings.py
+
+# Test artifacts
+.coverage.*
+nosetests.xml
+coverage/
+.tox/
+.nox/
+.hypothesis/
+.pytest_cache/
+pytestdebug.log 

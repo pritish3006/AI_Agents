@@ -7,5 +7,3 @@ from src.agents.models.coordination import (
 )
 from src.agents.coordinator.react_coordinator import ReActCoordinator
 from src.agents.coordinator.utils import ContextAnalyzer
-
-[Rest of the file remains unchanged] 

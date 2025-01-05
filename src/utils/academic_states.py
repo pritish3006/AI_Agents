@@ -1,5 +1,5 @@
-from typing import TypeVar, Dict, Any, List, TypedDict
-from typing_extensions import Annotated
+from typing import TypeVar, Dict, Any, List, Optional
+from typing_extensions import TypedDict, Annotated
 from datetime import datetime
 from .reducers import dict_reducer, list_append_reducer, list_unique_reducer
 from src.agents.base_agent import AgentState

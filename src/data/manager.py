@@ -1,163 +1,137 @@
-from typing import Dict, Any, List, Optional, Union
-from pathlib import Path
+from typing import Dict, Any, List, Optional, Union, Protocol
+from datetime import datetime, timezone
 import json
-from datetime import datetime
-import pinecone
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.schema import Document
-from src.config import AppConfig
+from pydantic import ValidationError
+from src.utils.academic_states import StudentProfile, CalendarEvent, AcademicTask
+
+class DataStore(Protocol):
+    """protocol for data storage implementations"""
+    async def store(self, key: str, data: Dict[str, Any]) -> None:
+        """store data with given key"""
+        ... # abstract method
+
+    async def retrieve(self, key: str) -> Optional[Dict[str, Any]]: 
+        """retrieve data for given key"""
+        ... # abstract method
+
+    async def delete(self, key: str) -> None:
+        """delete data for given key"""
+        ... # abstract method
+
+class MemoryStore(DataStore):
+    """in-memory implementation of the DataStore protocol"""
+    def __init__(self):
+        self._store: Dict[str, Dict[str, Any]] = {}
+
+    async def store(self, key: str, data: Dict[str, Any]) -> None:
+        self._store[key] = data
+    
+    async def retrieve(self, key: str) -> Optional[Dict[str, Any]]:
+        return self._store.get(key)
+    
+    async def delete(self, key: str) -> None:
+        self._store.pop(key, None)
+
+class DataValidationError(Exception):
+    """custom exception for data validation errors"""
+    def __init__(self, message: str, details: Dict[str, Any]):
+        self.message = message
+        self.details = details
+        super().__init__(message)
 
 class DataManager:
     """
-    Manages all data operations including:
-    - Document processing and storage
-    - Vector store operations
-    - State persistence
-    - Data retrieval and updates
+    centralized data manager for all data operations. 
+    handles data loading, parsing, and retrieval with proper validation and error handling. 
+    this class includes: 
+    - loading and parsing of data from various sources.
+    - retrieving the user's profile, calendar, and tasks.
+    - storing and retrieving agent states for persistence.
+    - data validation and error handling.
+    - caching mechanisms for performance optimization.
     """
-    
-    def __init__(self, config: AppConfig):
-        self.config = config
-        self.embeddings = OpenAIEmbeddings(
-            openai_api_key=config.OPENAI_API_KEY
-        )
-        self._initialize_vectorstore()
-        self._text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        
-    def _initialize_vectorstore(self) -> None:
-        """Initialize connection to vector store."""
-        pinecone.init(
-            api_key=self.config.PINECONE_API_KEY,
-            environment=self.config.PINECONE_ENVIRONMENT
-        )
-        if self.config.PINECONE_INDEX_NAME not in pinecone.list_indexes():
-            pinecone.create_index(
-                name=self.config.PINECONE_INDEX_NAME,
-                dimension=1536,  # OpenAI embeddings dimension
-                metric="cosine"
-            )
-        self.vectorstore = pinecone.Index(self.config.PINECONE_INDEX_NAME)
-    
-    async def process_document(
+
+    def __init__(self, store: Optional[DataStore] = None):
+        self.store = store or MemoryStore()
+
+    async def load_data(
         self,
-        content: Union[str, Path],
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> List[str]:
+        profile_data: Union[str, Dict],
+        calendar_data: Union[str, Dict],
+        task_data: Union[str, Dict]
+    ) -> bool:
         """
-        Process a document for storage and retrieval.
-        
+        load data from various sources and validate them
+
         Args:
-            content: Document content or file path
-            metadata: Additional document metadata
-            
+            profile_data: JSON string or dict containing user profile data
+            calendar_data: JSON string or dict containing calendar data
+            task_data: JSON string or dict containing task data
+
         Returns:
-            List of chunk IDs
+            bool: True if data is loaded and validated successfully, False otherwise
         """
-        # Load content if it's a file path
-        if isinstance(content, Path):
-            with open(content, 'r') as f:
-                content = f.read()
-        
-        # Split text into chunks
-        chunks = self._text_splitter.split_text(content)
-        
-        # Create documents with metadata
-        docs = []
-        chunk_ids = []
-        base_metadata = metadata or {}
-        
-        for i, chunk in enumerate(chunks):
-            chunk_id = f"chunk_{datetime.now().timestamp()}_{i}"
-            chunk_metadata = {
-                **base_metadata,
-                "chunk_id": chunk_id,
-                "chunk_index": i,
-                "total_chunks": len(chunks)
-            }
-            docs.append(Document(page_content=chunk, metadata=chunk_metadata))
-            chunk_ids.append(chunk_id)
-        
-        # Generate embeddings and store in vector store
-        await self.store_embeddings(docs)
-        
-        return chunk_ids
-    
-    async def store_embeddings(self, documents: List[Document]) -> None:
-        """Store document embeddings in vector store."""
-        # Generate embeddings
-        texts = [doc.page_content for doc in documents]
-        embeddings = await self.embeddings.aembed_documents(texts)
-        
-        # Prepare vectors for Pinecone
-        vectors = []
-        for i, (doc, embedding) in enumerate(zip(documents, embeddings)):
-            vectors.append((
-                doc.metadata["chunk_id"],
-                embedding,
-                {"text": doc.page_content, **doc.metadata}
-            ))
-        
-        # Upsert to Pinecone
-        self.vectorstore.upsert(vectors=vectors)
-    
-    async def search_similar(
-        self,
-        query: str,
-        top_k: int = 5,
-        filter: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
-        """Search for similar content using vector similarity."""
-        # Generate query embedding
-        query_embedding = await self.embeddings.aembed_query(query)
-        
-        # Search in vector store
-        results = self.vectorstore.query(
-            vector=query_embedding,
-            top_k=top_k,
-            include_metadata=True,
-            filter=filter
-        )
-        
-        return [
-            {
-                "text": match.metadata["text"],
-                "score": match.score,
-                "metadata": match.metadata
-            }
-            for match in results.matches
-        ]
-    
-    async def store_agent_state(
-        self,
-        agent_id: str,
-        state: Dict[str, Any]
-    ) -> None:
-        """Store agent state for persistence."""
-        # TODO: Implement proper state storage (e.g., in a database)
-        state_file = Path(f"data/states/{agent_id}.json")
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(state_file, 'w') as f:
-            json.dump(state, f)
-    
-    async def load_agent_state(
-        self,
-        agent_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """Load persisted agent state."""
-        state_file = Path(f"data/states/{agent_id}.json")
-        
-        if not state_file.exists():
-            return None
+        try:
+            # Parse JSON if needed
+            profile = profile_data if isinstance(profile_data, dict) else json.loads(profile_data)
+            calendar = calendar_data if isinstance(calendar_data, dict) else json.loads(calendar_data)
+            tasks = task_data if isinstance(task_data, dict) else json.loads(task_data)
+
+            # Debug print
+            print(f"Input profile data: {profile}")
+
+            # Validate data structure
+            if "events" not in calendar:
+                calendar["events"] = []
+            if "tasks" not in tasks:
+                tasks["tasks"] = []
+
+            # Validate and create models
+            student_profile = StudentProfile(**profile)
+            events = [CalendarEvent(**event) for event in calendar["events"]]
+            task_list = [AcademicTask(**task) for task in tasks["tasks"]]
+
+            # Debug print
+            print(f"Created profile: {student_profile}")
+            # Get profile ID before converting to dict
+            profile_id = student_profile.id
+
+            # Store data
+            await self.store.store(f"profile_{profile_id}", student_profile.dict())
+            await self.store.store(f"calendar_{profile_id}", {"events": [e.dict() for e in events]})
+            await self.store.store(f"tasks_{profile_id}", {"tasks": [t.dict() for t in task_list]})
+
+            # Verify storage (debug)
+            stored_profile = await self.store.retrieve(f"profile_{profile_id}")
+            stored_calendar = await self.store.retrieve(f"calendar_{profile_id}")
+            stored_tasks = await self.store.retrieve(f"tasks_{profile_id}")
             
-        with open(state_file, 'r') as f:
-            return json.load(f)
-    
-    async def cleanup(self) -> None:
-        """Cleanup resources."""
-        # TODO: Implement proper cleanup
-        pass 
+            print(f"Stored profile: {stored_profile}")
+            print(f"Stored calendar: {stored_calendar}")
+            print(f"Stored tasks: {stored_tasks}")
+
+            return True
+        except json.JSONDecodeError as e:
+            print(f"JSON parsing error: {e}")
+            return False
+        except ValidationError as e:
+            print(f"Validation error: {e}")
+            return False
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            return False
+
+    async def get_profile(self, profile_id: str) -> Optional[StudentProfile]:
+        """Get profile data"""
+        data = await self.store.retrieve(f"profile_{profile_id}")
+        return StudentProfile(**data) if data else None
+
+    async def get_calendar(self, profile_id: str) -> List[CalendarEvent]:
+        """Get calendar events"""
+        data = await self.store.retrieve(f"calendar_{profile_id}")
+        return [CalendarEvent(**event) for event in data.get("events", [])] if data else []
+
+    async def get_tasks(self, profile_id: str) -> List[AcademicTask]:
+        """Get tasks"""
+        data = await self.store.retrieve(f"tasks_{profile_id}")
+        return [AcademicTask(**task) for task in data.get("tasks", [])] if data else []

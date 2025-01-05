@@ -72,8 +72,46 @@
 4. Deployment procedures
 5. Backup and recovery procedures
 
+## Data Layer Reorganization
+1. Refactor Data Management Layer
+   - Centralize core data operations in DataManager (based on AcademicDataManager pattern)
+   - Extract document processing to Input Processing Layer
+   - Move vector operations to dedicated Vector Store Layer
+   - Implement clean interfaces between layers
+
+2. Input Processing Layer
+   - Document processing and chunking
+   - Initial data validation
+   - Format standardization
+   - Metadata extraction
+
+3. Vector Store Layer
+   - Vector database operations
+   - Embedding generation and storage
+   - Similarity search operations
+   - Vector cache management
+
+4. Core Data Management
+   - Profile management
+   - Calendar operations
+   - Task tracking
+   - State management
+   - Cache management
+   - Data validation
+
+5. Data Access Layer
+   - Repository pattern implementation
+   - CRUD operations
+   - Query interfaces
+   - Data transformation
+
 Notes:
 - Each phase should be completed with testing before moving to the next
 - Regular code reviews and documentation updates throughout
 - Iterative improvements based on feedback and testing results
 - Security considerations should be addressed in each phase 
+- Each layer should have clear boundaries and responsibilities
+- Implement proper dependency injection
+- Ensure proper error handling across layers
+- Add comprehensive logging for each layer
+- Implement proper testing for each layer 
