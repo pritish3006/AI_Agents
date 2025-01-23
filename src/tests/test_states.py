@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
 from langchain.schema import HumanMessage
-from utils.reducers import (
+from src.utils.reducers import (
     dict_reducer,
     add,
     StudentProfile,
@@ -49,7 +49,6 @@ def test_student_profile():
         "student_id": "12345",
         "name": "John Doe",
         "academic_level": "undergraduate",
-        "major": "Computer Science",
         "courses": ["CS101", "MATH201"],
         "preferences": {"study_time": "morning"},
         "learning_style": "visual",

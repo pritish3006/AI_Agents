@@ -86,4 +86,12 @@ coverage/
 .nox/
 .hypothesis/
 .pytest_cache/
-pytestdebug.log 
+pytestdebug.log
+
+# Cursor files
+.cursor/
+.cursorrules
+.cursorignore
+.cursor.json
+.cursor-test/
+*.cursor-log 

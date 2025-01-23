@@ -45,10 +45,14 @@ def sample_profile():
         "name": "Test User",
         "type": "student",
         "learning_goals": ["Python", "ML"],
+        "level": "undergraduate",
+        "courses": ["Python", "ML"],
+        "topics": ["Programming", "Machine Learning"],
         "preferences": {
             "study_time": "morning",
             "session_duration": 60
-        }
+        },
+        "history": []
     }
 
 @pytest.fixture
@@ -60,9 +64,11 @@ def sample_calendar():
             {
                 "id": "evt1",
                 "title": "Study Session",
-                "start_time": now.isoformat(),
-                "end_time": now.isoformat(),
-                "description": "Python Basics"
+                "type": "study",
+                "start_time": now,
+                "end_time": now,
+                "description": "Python Basics",
+                "metadata": {}
             }
         ]
     }
@@ -70,14 +76,18 @@ def sample_calendar():
 @pytest.fixture
 def sample_tasks():
     """Create sample tasks for testing."""
+    now = datetime.now(timezone.utc)
     return {
         "tasks": [
             {
                 "id": "task1",
                 "title": "Complete Exercise",
                 "description": "Python exercises",
+                "due_date": now,
                 "status": "pending",
-                "due_date": datetime.now(timezone.utc).isoformat()
+                "priority": 1,
+                "attachments": [],
+                "metadata": {}
             }
         ]
     }

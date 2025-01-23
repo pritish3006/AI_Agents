@@ -61,7 +61,7 @@ class DataManager:
         task_data: Union[str, Dict]
     ) -> bool:
         """
-        load data from various sources and validate them
+        Load and validate data using Pydantic models.
 
         Args:
             profile_data: JSON string or dict containing user profile data
@@ -86,29 +86,33 @@ class DataManager:
             if "tasks" not in tasks:
                 tasks["tasks"] = []
 
-            # Validate and create models
+            # Create and validate Pydantic models
             student_profile = StudentProfile(**profile)
             events = [CalendarEvent(**event) for event in calendar["events"]]
             task_list = [AcademicTask(**task) for task in tasks["tasks"]]
 
             # Debug print
             print(f"Created profile: {student_profile}")
-            # Get profile ID before converting to dict
-            profile_id = student_profile.id
-
-            # Store data
-            await self.store.store(f"profile_{profile_id}", student_profile.dict())
-            await self.store.store(f"calendar_{profile_id}", {"events": [e.dict() for e in events]})
-            await self.store.store(f"tasks_{profile_id}", {"tasks": [t.dict() for t in task_list]})
-
-            # Verify storage (debug)
-            stored_profile = await self.store.retrieve(f"profile_{profile_id}")
-            stored_calendar = await self.store.retrieve(f"calendar_{profile_id}")
-            stored_tasks = await self.store.retrieve(f"tasks_{profile_id}")
             
-            print(f"Stored profile: {stored_profile}")
-            print(f"Stored calendar: {stored_calendar}")
-            print(f"Stored tasks: {stored_tasks}")
+            # Get profile ID from the validated model
+            profile_id = student_profile.id
+            if profile_id is None:
+                print("Profile ID cannot be None")
+                return False
+
+            # Store validated Pydantic models as dictionaries
+            await self.store.store(
+                f"profile_{profile_id}", 
+                student_profile.model_dump()
+            )
+            await self.store.store(
+                f"calendar_{profile_id}", 
+                {"events": [event.model_dump() for event in events]}
+            )
+            await self.store.store(
+                f"tasks_{profile_id}", 
+                {"tasks": [task.model_dump() for task in task_list]}
+            )
 
             return True
         except json.JSONDecodeError as e:
@@ -122,16 +126,55 @@ class DataManager:
             return False
 
     async def get_profile(self, profile_id: str) -> Optional[StudentProfile]:
-        """Get profile data"""
+        """
+        Get profile data as a StudentProfile model.
+        Raises:
+            ValidationError: If profile data fails validation
+            Exception: If there is an error retrieving or processing the profile
+        Returns: None if the profile doesn't exist
+        """
         data = await self.store.retrieve(f"profile_{profile_id}")
-        return StudentProfile(**data) if data else None
+        if data is None:
+            return None
+        try:
+            return StudentProfile(**data)
+        except ValidationError as e:
+            print(f"Validation error retrieving profile: {e}")
+            return None
+        except Exception as e:
+            print(f"Error retrieving profile: {e}")
+            return None
 
     async def get_calendar(self, profile_id: str) -> List[CalendarEvent]:
-        """Get calendar events"""
+        """
+        Get calendar events as CalendarEvent models.
+        Returns empty list if no events or validation fails.
+        """
         data = await self.store.retrieve(f"calendar_{profile_id}")
-        return [CalendarEvent(**event) for event in data.get("events", [])] if data else []
+        if data is None:
+            return []
+        try:
+            return [CalendarEvent(**event) for event in data.get("events", [])]
+        except ValidationError as e:
+            print(f"Validation error retrieving calendar: {e}")
+            return []
+        except Exception as e:
+            print(f"Error retrieving calendar: {e}")
+            return []
 
     async def get_tasks(self, profile_id: str) -> List[AcademicTask]:
-        """Get tasks"""
+        """
+        Get tasks as AcademicTask models.
+        Returns empty list if no tasks or validation fails.
+        """
         data = await self.store.retrieve(f"tasks_{profile_id}")
-        return [AcademicTask(**task) for task in data.get("tasks", [])] if data else []
+        if data is None:
+            return []
+        try:
+            return [AcademicTask(**task) for task in data.get("tasks", [])]
+        except ValidationError as e:
+            print(f"Validation error retrieving tasks: {e}")
+            return []
+        except Exception as e:
+            print(f"Error retrieving tasks: {e}")
+            return []

@@ -5,16 +5,20 @@ from .reducers import dict_reducer, list_append_reducer, list_unique_reducer
 from src.agents.base_agent import AgentState
 from src.agents.models.coordination import ValidationResult
 
-class StudentProfile(TypedDict):
-    """Student profile information."""
+class StudentProfileRequired(TypedDict):
+    """Required student profile fields."""
     id: str
     name: str
+    type: str  # type of user (e.g., "student", "teacher", etc.)
+
+class StudentProfile(StudentProfileRequired, total=False):
+    """Student profile information with optional fields."""
     level: Optional[str]
-    major: Optional[str]
-    courses: Optional[Annotated[List[str], list_unique_reducer]]
-    topics: Optional[Annotated[List[str], list_unique_reducer]]
-    preferences: Optional[Annotated[Dict[str, Any], dict_reducer]]
-    history: Optional[Annotated[List[Dict[str, Any]], list_append_reducer]]
+    learning_goals: Annotated[List[str], list_unique_reducer]  # user's learning goals
+    courses: Annotated[List[str], list_unique_reducer]
+    topics: Annotated[List[str], list_unique_reducer]
+    preferences: Annotated[Dict[str, Any], dict_reducer]
+    history: Annotated[List[Dict[str, Any]], list_append_reducer]
 
 class CalendarEvent(TypedDict):
     """Academic calendar event."""
@@ -24,7 +28,6 @@ class CalendarEvent(TypedDict):
     start_time: datetime
     end_time: datetime
     description: str
-    course_id: str
     metadata: Dict[str, Any]
 
 class AcademicTask(TypedDict):
@@ -32,8 +35,7 @@ class AcademicTask(TypedDict):
     id: str
     title: str
     description: str
-    course_id: str
-    due_date: datetime
+    due_date: Optional[datetime]
     status: str
     priority: int
     attachments: List[str]
@@ -65,6 +67,8 @@ class AcademicState(AgentState):
     Master state container for the academic assistance system.
     Inherits from base AgentState for consistent state management.
     """
+    model_config = {"arbitrary_types_allowed": True}
+    
     # Student information
     profile: Annotated[StudentProfile, dict_reducer]
     
@@ -112,13 +116,12 @@ class AcademicState(AgentState):
             tasks=dict_reducer(self.tasks, other.tasks),
             active_tasks=list_unique_reducer(self.active_tasks, other.active_tasks),
             completed_tasks=list_append_reducer(self.completed_tasks, other.completed_tasks),
-            course_progress=dict_reducer(self.course_progress, other.course_progress),
-            grades=dict_reducer(self.grades, other.grades),
+            progress=dict_reducer(self.progress, other.progress),
             learning_resources=dict_reducer(self.learning_resources, other.learning_resources),
             study_plans=dict_reducer(self.study_plans, other.study_plans),
             results=dict_reducer(self.results, other.results),
             feedback=list_append_reducer(self.feedback, other.feedback),
-            validation=dict_reducer(self.validation, other.validation),
+            validation=dict_reducer(self.validation.model_dump(), other.validation.model_dump()),
             notifications=list_append_reducer(self.notifications, other.notifications)
         )
         

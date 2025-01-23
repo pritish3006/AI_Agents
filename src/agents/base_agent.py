@@ -19,6 +19,24 @@ class AgentState(BaseModel):
     status: str = Field(default="running")
     error: Optional[str] = Field(default=None)
 
+    def merge(self, other: 'AgentState') -> Dict[str, Any]:
+        """
+        Merge base state fields.
+        
+        Args:
+            other (AgentState): Another state to merge with
+            
+        Returns:
+            Dict[str, Any]: Merged base state fields
+        """
+        return {
+            "messages": self.messages + other.messages,
+            "next_step": other.next_step,
+            "context": {**self.context, **other.context},
+            "status": other.status,
+            "error": other.error if other.error else self.error
+        }
+
 class BaseAgent(ABC):
     """Base agent class for all specialized agents."""
     

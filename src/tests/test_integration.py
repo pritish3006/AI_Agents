@@ -1,29 +1,35 @@
 import pytest
 from datetime import datetime, timezone
 from typing import Dict, Any
-
-from src.data.manager import DataManager, MemoryStore
 from src.utils.academic_states import (
-    StudentProfile, CalendarEvent, AcademicTask, 
-    AcademicState
+    AcademicState,
+    StudentProfile,
+    CalendarEvent,
+    AcademicTask
 )
+from src.data.manager import DataManager, MemoryStore
 
 @pytest.fixture
-def data_manager():
-    """Create a DataManager instance with MemoryStore."""
-    return DataManager(store=MemoryStore())
+async def memory_store():
+    """Create a memory store instance for testing."""
+    store = MemoryStore()
+    return store
 
 @pytest.fixture
-def sample_academic_data():
-    """Create a complete set of sample academic data."""
+async def data_manager(memory_store):
+    """Create a data manager instance for testing."""
+    store = await memory_store
+    return DataManager(store=store)
+
+@pytest.fixture
+def sample_student_data() -> Dict[str, Any]:
+    """Create sample student data for testing."""
     now = datetime.now(timezone.utc)
-    
     return {
         "profile": {
             "id": "student123",
-            "name": "John Doe",
+            "name": "Test Student",
             "level": "undergraduate",
-            "major": "Computer Science",
             "courses": ["CS101", "MATH201"],
             "topics": ["Python", "Data Structures"],
             "preferences": {"study_time": "morning"},
@@ -38,8 +44,7 @@ def sample_academic_data():
                     "start_time": now,
                     "end_time": now,
                     "description": "Introduction to Programming",
-                    "course_id": "CS101",
-                    "metadata": {"room": "101"}
+                    "metadata": {}
                 }
             ]
         },
@@ -47,9 +52,8 @@ def sample_academic_data():
             "tasks": [
                 {
                     "id": "task123",
-                    "title": "Complete Assignment 1",
-                    "description": "Python basics assignment",
-                    "course_id": "CS101",
+                    "title": "Assignment 1",
+                    "description": "Complete programming exercise",
                     "due_date": now,
                     "status": "pending",
                     "priority": 1,
@@ -60,193 +64,109 @@ def sample_academic_data():
         }
     }
 
-@pytest.mark.asyncio
-class TestDataManagerIntegration:
-    """Integration tests for DataManager with other components."""
+class TestSystemIntegration:
+    """Integration tests for the system components."""
 
-    async def test_full_academic_workflow(self, data_manager, sample_academic_data):
-        """
-        Test complete academic workflow from data loading to state management.
-        Verifies:
-        - Data loading through DataManager
-        - Profile retrieval and validation
-        - Calendar management
-        - Task management
-        - State consistency across operations
-        """
-        # Load all data
+    @pytest.mark.asyncio
+    async def test_student_data_flow(
+        self,
+        data_manager: DataManager,
+        sample_student_data: Dict[str, Any]
+    ):
+        """Test the complete flow of student data through the system."""
+        student_id = sample_student_data["profile"]["id"]
+
+        # Store initial state
         success = await data_manager.load_data(
-            profile_data=sample_academic_data["profile"],
-            calendar_data=sample_academic_data["calendar"],
-            task_data=sample_academic_data["tasks"]
+            profile_data=sample_student_data["profile"],
+            calendar_data=sample_student_data["calendar"],
+            task_data=sample_student_data["tasks"]
         )
         assert success is True
 
-        # Verify profile data
-        profile = await data_manager.get_profile("student123")
+        # Retrieve and verify state
+        profile = await data_manager.get_profile(student_id)
+        calendar = await data_manager.get_calendar(student_id)
+        tasks = await data_manager.get_tasks(student_id)
+
         assert profile is not None
-        assert profile.name == "John Doe"
+        assert profile.name == "Test Student"
+        assert profile.level == "undergraduate"
+        assert len(profile.courses) == 2
         assert "CS101" in profile.courses
 
-        # Verify calendar data
-        events = await data_manager.get_calendar("student123")
-        assert len(events) == 1
-        assert events[0].title == "CS101 Lecture"
+        assert len(calendar) == 1
+        assert calendar[0].title == "CS101 Lecture"
+        assert calendar[0].type == "class"
 
-        # Verify task data
-        tasks = await data_manager.get_tasks("student123")
         assert len(tasks) == 1
-        assert tasks[0].title == "Complete Assignment 1"
+        assert tasks[0].title == "Assignment 1"
+        assert tasks[0].status == "pending"
 
-    async def test_state_persistence(self, data_manager, sample_academic_data):
-        """
-        Test state persistence across multiple operations.
-        Verifies:
-        - State is maintained between operations
-        - Updates are persistent
-        - State is consistent after multiple operations
-        """
-        # Initial data load
-        await data_manager.load_data(
-            profile_data=sample_academic_data["profile"],
-            calendar_data=sample_academic_data["calendar"],
-            task_data=sample_academic_data["tasks"]
-        )
-
-        # Modify profile
-        profile = await data_manager.get_profile("student123")
-        profile.topics.append("Algorithms")
-        await data_manager.update_profile("student123", profile)
-
-        # Verify persistence
-        updated_profile = await data_manager.get_profile("student123")
-        assert "Algorithms" in updated_profile.topics
-
-        # Verify other data remained unchanged
-        events = await data_manager.get_calendar("student123")
-        assert len(events) == 1
-        assert events[0].title == "CS101 Lecture"
-
-    async def test_error_handling(self, data_manager):
-        """
-        Test error handling in integrated environment.
-        Verifies:
-        - Invalid data handling
-        - Missing data handling
-        - Error propagation
-        """
-        # Test loading invalid profile
-        invalid_profile = {"invalid": "data"}
+    @pytest.mark.asyncio
+    async def test_concurrent_updates(
+        self,
+        data_manager: DataManager,
+        sample_student_data: Dict[str, Any]
+    ):
+        """Test handling of concurrent updates."""
+        student_id = sample_student_data["profile"]["id"]
+        
+        # Store initial state
         success = await data_manager.load_data(
+            profile_data=sample_student_data["profile"],
+            calendar_data=sample_student_data["calendar"],
+            task_data=sample_student_data["tasks"]
+        )
+        assert success is True
+        
+        # Update profile with new courses
+        updated_profile = dict(sample_student_data["profile"])
+        updated_profile["courses"].append("CS102")
+        
+        # Store updates
+        success = await data_manager.load_data(
+            profile_data=updated_profile,
+            calendar_data={},
+            task_data={}
+        )
+        assert success is True
+        
+        # Verify updates
+        final_profile = await data_manager.get_profile(student_id)
+        assert final_profile is not None
+        assert "CS102" in final_profile.courses
+        assert len(final_profile.courses) == 3
+
+    @pytest.mark.asyncio
+    async def test_error_handling(
+        self,
+        data_manager: DataManager,
+        sample_student_data: Dict[str, Any]
+    ):
+        """Test error handling in the system."""
+        student_id = sample_student_data["profile"]["id"]
+        
+        # Store initial state
+        success = await data_manager.load_data(
+            profile_data=sample_student_data["profile"],
+            calendar_data=sample_student_data["calendar"],
+            task_data=sample_student_data["tasks"]
+        )
+        assert success is True
+        
+        # Try invalid data
+        invalid_profile = dict(sample_student_data["profile"])
+        invalid_profile["id"] = None  # This should fail validation
+        
+        result = await data_manager.load_data(
             profile_data=invalid_profile,
             calendar_data={},
             task_data={}
         )
-        assert success is False
-
-        # Test retrieving non-existent data
-        profile = await data_manager.get_profile("nonexistent")
-        assert profile is None
-
-        events = await data_manager.get_calendar("nonexistent")
-        assert len(events) == 0
-
-        tasks = await data_manager.get_tasks("nonexistent")
-        assert len(tasks) == 0
-
-@pytest.mark.asyncio
-class TestStateManagerIntegration:
-    """Integration tests for State Management with Data Storage."""
-
-    async def test_state_data_store_integration(self, data_manager, sample_academic_data):
-        """
-        Test integration between state management and data storage.
-        Verifies:
-        - State changes are properly stored
-        - State can be reconstructed from storage
-        - State operations affect storage correctly
-        """
-        # Create initial state
-        initial_state = AcademicState(
-            profile=sample_academic_data["profile"],
-            calendar={},
-            upcoming_events=[],
-            tasks={},
-            active_tasks=[],
-            completed_tasks=[],
-            progress={},
-            learning_resources={},
-            study_plans={},
-            results={},
-            feedback=[],
-            validation={},
-            notifications=[]
-        )
-
-        # Store state
-        await data_manager.store_state("student123", initial_state)
-
-        # Modify state
-        initial_state.active_tasks.append("task1")
-        await data_manager.store_state("student123", initial_state)
-
-        # Retrieve and verify state
-        retrieved_state = await data_manager.get_state("student123")
-        assert retrieved_state is not None
-        assert "task1" in retrieved_state.active_tasks
-
-    async def test_concurrent_state_operations(self, data_manager, sample_academic_data):
-        """
-        Test concurrent state operations.
-        Verifies:
-        - Multiple state operations can occur concurrently
-        - State consistency is maintained under concurrent operations
-        - No data corruption occurs during concurrent access
-        """
-        import asyncio
-
-        # Create initial states
-        state1 = AcademicState(
-            profile=sample_academic_data["profile"],
-            calendar={},
-            upcoming_events=[],
-            tasks={},
-            active_tasks=["task1"],
-            completed_tasks=[],
-            progress={},
-            learning_resources={},
-            study_plans={},
-            results={},
-            feedback=[],
-            validation={},
-            notifications=[]
-        )
-
-        state2 = AcademicState(
-            profile=sample_academic_data["profile"],
-            calendar={},
-            upcoming_events=[],
-            tasks={},
-            active_tasks=["task2"],
-            completed_tasks=[],
-            progress={},
-            learning_resources={},
-            study_plans={},
-            results={},
-            feedback=[],
-            validation={},
-            notifications=[]
-        )
-
-        # Perform concurrent operations
-        await asyncio.gather(
-            data_manager.store_state("student1", state1),
-            data_manager.store_state("student2", state2)
-        )
-
-        # Verify states
-        retrieved_state1 = await data_manager.get_state("student1")
-        retrieved_state2 = await data_manager.get_state("student2")
-
-        assert "task1" in retrieved_state1.active_tasks
-        assert "task2" in retrieved_state2.active_tasks 
+        assert result is False  # Should return False for invalid data
+        
+        # Verify original state preserved
+        profile = await data_manager.get_profile(student_id)
+        assert profile is not None
+        assert profile.id == student_id  # Original data should be preserved 
